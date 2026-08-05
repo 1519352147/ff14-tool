@@ -171,7 +171,7 @@
 
     <script>
         // ============================================================
-        // 0. 职业中文名 → 英文Type 映射（用于导出）
+        // 职业中文名 → 英文Type 映射（用于导出）
         // ============================================================
         const PROFESSION_TYPE = {
             '刻木匠': 'Carpenter',
@@ -185,7 +185,7 @@
         };
 
         // ============================================================
-        // 1. 升级经验表（1~100级）
+        // 升级经验表（1~100级）
         // ============================================================
         const EXP = [
             300, 450, 630, 970, 1440, 1940, 3000, 3920, 4970, 5900,
@@ -201,7 +201,7 @@
         ];
 
         // ============================================================
-        // 2. 职业数据（从外部 JSON 加载）
+        // 职业数据（从外部 JSON 加载）
         // ============================================================
         let PD = {};
         let dataLoaded = false;
@@ -226,7 +226,6 @@
                 const resp = await fetch('https://raw.githubusercontent.com/1519352147/ff14-tool/main/items.json');
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const data = await resp.json();
-                // 支持数组格式：[{id: 8, name: "火之水晶"}, ...]
                 if (Array.isArray(data)) {
                     data.forEach(item => {
                         if (item.name && item.id !== undefined) {
@@ -234,11 +233,9 @@
                         }
                     });
                 } else if (typeof data === 'object' && data !== null) {
-                    // 如果是单个对象，也尝试添加
                     if (data.name && data.id !== undefined) {
                         itemMap[data.name] = Number(data.id);
                     } else {
-                        // 尝试作为普通对象 { "道具名": ID } 处理
                         for (const [key, val] of Object.entries(data)) {
                             if (typeof val === 'number' || !isNaN(Number(val))) {
                                 itemMap[key] = Number(val);
@@ -288,7 +285,7 @@
         }
 
         // ============================================================
-        // 3. 核心逻辑
+        // 核心逻辑
         // ============================================================
         let overrides = {};
 
@@ -341,7 +338,7 @@
         }
 
         // ============================================================
-        // 4. 渲染
+        // 渲染
         // ============================================================
         function render() {
             const prof = document.getElementById('profession').value;
@@ -454,7 +451,7 @@
         }
 
         // ============================================================
-        // 5. 导出功能（纯数组格式，使用物品ID）
+        // 导出功能（最终版：无Id，无ItemName，仅 Group, Item, Amount, Enabled, Type）
         // ============================================================
         function exportResult() {
             const statusEl = document.getElementById('exportStatus');
@@ -472,7 +469,7 @@
             const prof = document.getElementById('profession').value;
             const type = PROFESSION_TYPE[prof] || 'Unknown';
 
-            const exportData = currentResult.tasks.map((item, index) => {
+            const exportData = currentResult.tasks.map((item) => {
                 const itemName = item.detail[4];
                 let itemId = itemMap[itemName];
                 if (itemId === undefined || itemId === null) {
@@ -483,7 +480,6 @@
                     itemId = Number(itemId) || 0;
                 }
                 return {
-                    Id: index + 1,
                     Group: 1,
                     Item: itemId,
                     Amount: item.count,
@@ -511,7 +507,7 @@
         }
 
         // ============================================================
-        // 6. 复制道具
+        // 复制道具
         // ============================================================
         function copyItem(text, btn) {
             navigator.clipboard.writeText(text).then(() => {
@@ -533,12 +529,12 @@
         }
 
         // ============================================================
-        // 7. 重置
+        // 重置
         // ============================================================
         function resetOverrides() { overrides = {}; render(); }
 
         // ============================================================
-        // 8. 查看全部
+        // 查看全部
         // ============================================================
         function showAll() {
             const prof = document.getElementById('profession').value;
@@ -576,7 +572,7 @@
         }
 
         // ============================================================
-        // 9. 透明度
+        // 透明度
         // ============================================================
         function setupOpacity() {
             const slider = document.getElementById('opacitySlider');
@@ -608,7 +604,7 @@
         }
 
         // ============================================================
-        // 10. 事件绑定 & 启动
+        // 事件绑定 & 启动
         // ============================================================
         document.getElementById('profession').addEventListener('change', render);
         document.getElementById('startLevel').addEventListener('input', render);
