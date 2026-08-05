@@ -203,11 +203,10 @@
         // ============================================================
         // 2. 职业数据（从外部 JSON 加载）
         // ============================================================
-        let PD = {}; // 将动态加载
+        let PD = {};
         let dataLoaded = false;
-        let currentResult = null; // 存储当前计算结果用于导出
+        let currentResult = null;
 
-        // 职业名映射到 JSON 文件名
         const PROFESSION_FILES = {
             '刻木匠': 'data/kemu.json',
             '锻铁匠': 'data/duantie.json',
@@ -219,25 +218,33 @@
             '烹调师': 'data/chuzi.json'
         };
 
-        // ---------- 新增：物品ID映射 ----------
-        let itemMap = {}; // { 道具名: 数字ID }
+        // ---------- 物品ID映射 ----------
+        let itemMap = {};
 
         async function loadItemMap() {
             try {
                 const resp = await fetch('https://raw.githubusercontent.com/1519352147/ff14-tool/main/items.json');
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                 const data = await resp.json();
-                // 假设 items.json 格式为 { "道具名": 数字ID, ... }
-                // 如果格式是数组 [{name, id}]，可转换，这里暂按对象处理
-                if (typeof data === 'object' && !Array.isArray(data)) {
-                    itemMap = data;
-                } else if (Array.isArray(data)) {
-                    // 如果是数组，构建映射
+                // 支持数组格式：[{id: 8, name: "火之水晶"}, ...]
+                if (Array.isArray(data)) {
                     data.forEach(item => {
-                        if (item.name && item.id) itemMap[item.name] = item.id;
+                        if (item.name && item.id !== undefined) {
+                            itemMap[item.name] = Number(item.id);
+                        }
                     });
-                } else {
-                    throw new Error('items.json 格式不符合预期');
+                } else if (typeof data === 'object' && data !== null) {
+                    // 如果是单个对象，也尝试添加
+                    if (data.name && data.id !== undefined) {
+                        itemMap[data.name] = Number(data.id);
+                    } else {
+                        // 尝试作为普通对象 { "道具名": ID } 处理
+                        for (const [key, val] of Object.entries(data)) {
+                            if (typeof val === 'number' || !isNaN(Number(val))) {
+                                itemMap[key] = Number(val);
+                            }
+                        }
+                    }
                 }
                 console.log(`✅ items.json 加载成功，共 ${Object.keys(itemMap).length} 个物品`);
             } catch (e) {
@@ -269,13 +276,11 @@
             }
         }
 
-        // 预加载所有职业数据（在页面初始化时）
         async function loadAllData() {
             const professions = Object.keys(PROFESSION_FILES);
             const promises = professions.map(p => loadProfessionData(p));
             await Promise.all(promises);
             dataLoaded = true;
-            // 为未加载到的职业设置空对象
             for (const p of professions) {
                 if (!PD[p]) PD[p] = {};
             }
@@ -283,7 +288,7 @@
         }
 
         // ============================================================
-        // 3. 核心逻辑（支持覆盖）
+        // 3. 核心逻辑
         // ============================================================
         let overrides = {};
 
@@ -291,15 +296,13 @@
             if (overrides[level]) {
                 return { level: level, detail: overrides[level] };
             }
-            let best = null,
-                maxExp = 0;
+            let best = null, maxExp = 0;
             for (const [lv, tasks] of Object.entries(data)) {
                 const lvNum = parseInt(lv);
                 if (lvNum <= level) {
                     for (const t of tasks) {
                         const e = t[2] * 2;
-                        if (e > maxExp) { maxExp = e;
-                            best = { level: lvNum, detail: t }; }
+                        if (e > maxExp) { maxExp = e; best = { level: lvNum, detail: t }; }
                     }
                 }
             }
@@ -307,28 +310,20 @@
         }
 
         function calc(startLv, targetLv, startExp, data) {
-            let lv = startLv,
-                cur = startExp;
-            while (lv < targetLv && cur >= EXP[lv - 1]) { cur -= EXP[lv - 1];
-                lv++; }
+            let lv = startLv, cur = startExp;
+            while (lv < targetLv && cur >= EXP[lv - 1]) { cur -= EXP[lv - 1]; lv++; }
             const converted = lv;
             if (lv >= targetLv) return { converted, target: targetLv, tasks: [], total: 0, remain: cur, gold: 0 };
 
             const map = new Map();
-            let total = 0,
-                gold = 0;
+            let total = 0, gold = 0;
             while (lv < targetLv) {
                 const need = EXP[lv - 1];
                 const best = getBest(lv, data);
                 if (!best) break;
-                const e = best.detail[2] * 2,
-                    g = best.detail[3],
-                    name = best.detail[0];
+                const e = best.detail[2] * 2, g = best.detail[3], name = best.detail[0];
                 let cnt = 0;
-                while (cur < need) { cur += e;
-                    cnt++;
-                    total++;
-                    gold += g; }
+                while (cur < need) { cur += e; cnt++; total++; gold += g; }
                 cur -= need;
                 if (map.has(name)) {
                     const entry = map.get(name);
@@ -371,7 +366,7 @@
             }
 
             const r = calc(clampedStart, clampedTarget, startExp, data);
-            currentResult = r; // 保存用于导出
+            currentResult = r;
 
             document.getElementById('convertedLevel').textContent = r.converted;
             document.getElementById('targetLevelDisplay').textContent = r.target;
@@ -390,8 +385,7 @@
             let html = '';
             for (const item of r.tasks) {
                 const d = item.detail;
-                const e = d[2] * 2,
-                    g = d[3];
+                const e = d[2] * 2, g = d[3];
                 const range = item.start === item.end ? `${item.start}级` : `${item.start}～${item.end}级`;
                 const repLevel = item.start;
                 const itemName = d[4];
@@ -413,8 +407,7 @@
                     for (const entry of allTasks) {
                         const t = entry.task;
                         const isSelected = (t[0] === d[0] && t[2] === d[2] && t[3] === d[3]);
-                        const label =
-                            `[Lv.${entry.level}] ${t[0]} | 经验:${t[2]*2} | 金币:${t[3]} | ${t[1]} | 道具:${t[4]}`;
+                        const label = `[Lv.${entry.level}] ${t[0]} | 经验:${t[2]*2} | 金币:${t[3]} | ${t[1]} | 道具:${t[4]}`;
                         optionsHtml += `<option value='${JSON.stringify(t).replace(/'/g,"&#39;")}' ${isSelected ? 'selected' : ''}>${label}</option>`;
                     }
                     taskHtml = `
@@ -461,7 +454,7 @@
         }
 
         // ============================================================
-        // 5. 导出功能（重写：纯数组格式，使用物品ID）
+        // 5. 导出功能（纯数组格式，使用物品ID）
         // ============================================================
         function exportResult() {
             const statusEl = document.getElementById('exportStatus');
@@ -480,15 +473,14 @@
             const type = PROFESSION_TYPE[prof] || 'Unknown';
 
             const exportData = currentResult.tasks.map((item, index) => {
-                const itemName = item.detail[4]; // 道具名称
+                const itemName = item.detail[4];
                 let itemId = itemMap[itemName];
                 if (itemId === undefined || itemId === null) {
                     console.warn(`⚠️ 未找到道具 "${itemName}" 的ID，将使用0`);
                     itemId = 0;
                 }
-                // 确保 ID 为数字
                 if (typeof itemId !== 'number') {
-                    itemId = parseInt(itemId) || 0;
+                    itemId = Number(itemId) || 0;
                 }
                 return {
                     Id: index + 1,
@@ -500,7 +492,6 @@
                 };
             });
 
-            // 生成 JSON 文件（纯数组，无包装）
             const jsonStr = JSON.stringify(exportData, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -520,15 +511,14 @@
         }
 
         // ============================================================
-        // 6. 复制道具功能
+        // 6. 复制道具
         // ============================================================
         function copyItem(text, btn) {
             navigator.clipboard.writeText(text).then(() => {
                 const orig = btn.textContent;
                 btn.textContent = '✅';
                 btn.style.background = '#e91e63';
-                setTimeout(() => { btn.textContent = orig;
-                    btn.style.background = '#f48fb1'; }, 1200);
+                setTimeout(() => { btn.textContent = orig; btn.style.background = '#f48fb1'; }, 1200);
             }).catch(() => {
                 const ta = document.createElement('textarea');
                 ta.value = text;
@@ -543,15 +533,12 @@
         }
 
         // ============================================================
-        // 7. 重置覆盖
+        // 7. 重置
         // ============================================================
-        function resetOverrides() {
-            overrides = {};
-            render();
-        }
+        function resetOverrides() { overrides = {}; render(); }
 
         // ============================================================
-        // 8. 辅助功能
+        // 8. 查看全部
         // ============================================================
         function showAll() {
             const prof = document.getElementById('profession').value;
@@ -567,12 +554,10 @@
             }
             title.textContent = `📋 ${prof} - 全部理符任务`;
             const levels = Object.keys(data).sort((a, b) => parseInt(a) - parseInt(b));
-            let html =
-                `<table><thead><tr><th>等级</th><th>任务名称</th><th>接取地点</th><th>经验</th><th>金币</th><th>道具</th></tr></thead><tbody>`;
+            let html = `<table><thead><tr><th>等级</th><th>任务名称</th><th>接取地点</th><th>经验</th><th>金币</th><th>道具</th></tr></thead><tbody>`;
             for (const lv of levels) {
                 for (const t of data[lv] || []) {
-                    html +=
-                        `<tr><td><span class="badge">Lv.${lv}</span></td><td>${t[0]}</td><td>${t[1]}</td><td>${t[2].toLocaleString()}</td><td>${t[3].toLocaleString()}</td><td>${t[4]}</td></tr>`;
+                    html += `<tr><td><span class="badge">Lv.${lv}</span></td><td>${t[0]}</td><td>${t[1]}</td><td>${t[2].toLocaleString()}</td><td>${t[3].toLocaleString()}</td><td>${t[4]}</td></tr>`;
                 }
             }
             html += `</tbody></table>`;
@@ -591,7 +576,7 @@
         }
 
         // ============================================================
-        // 9. 透明度控制
+        // 9. 透明度
         // ============================================================
         function setupOpacity() {
             const slider = document.getElementById('opacitySlider');
@@ -623,7 +608,7 @@
         }
 
         // ============================================================
-        // 10. 事件绑定与启动（加载物品映射 + 职业数据）
+        // 10. 事件绑定 & 启动
         // ============================================================
         document.getElementById('profession').addEventListener('change', render);
         document.getElementById('startLevel').addEventListener('input', render);
@@ -636,15 +621,14 @@
         document.getElementById('modalCloseBtn').addEventListener('click', () =>
             document.getElementById('taskModal').classList.remove('active'));
         document.getElementById('taskModal').addEventListener('click', e => {
-             (e.target === e.currentTarget) e.target.classList.remove('active');
+            if (e.target === e.currentTarget) e.target.classList.remove('active');
         });
 
         setupOpacity();
 
-        // 启动：先加载物品映射，再加载职业数据
-        (init() {
-            等待 加载项目地图();
-            等待 加载所有数据()
+        (async function init() {
+            await loadItemMap();
+            await loadAllData();
         })();
     </script>
 </body>
