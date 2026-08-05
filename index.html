@@ -171,6 +171,20 @@
 
     <script>
         // ============================================================
+        // 0. 职业中文名 → 英文Type 映射（用于导出）
+        // ============================================================
+        const PROFESSION_TYPE = {
+            '刻木匠': 'Carpenter',
+            '锻铁匠': 'Blacksmith',
+            '铸甲匠': 'Armorer',
+            '雕金匠': 'Goldsmith',
+            '制革匠': 'Leatherworker',
+            '裁衣匠': 'Weaver',
+            '炼金术士': 'Alchemist',
+            '烹调师': 'Culinarian'
+        };
+
+        // ============================================================
         // 1. 升级经验表（1~100级）
         // ============================================================
         const EXP = [
@@ -204,6 +218,33 @@
             '炼金术士': 'data/lianjin.json',
             '烹调师': 'data/chuzi.json'
         };
+
+        // ---------- 新增：物品ID映射 ----------
+        let itemMap = {}; // { 道具名: 数字ID }
+
+        async function loadItemMap() {
+            try {
+                const resp = await fetch('https://raw.githubusercontent.com/1519352147/ff14-tool/main/items.json');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                // 假设 items.json 格式为 { "道具名": 数字ID, ... }
+                // 如果格式是数组 [{name, id}]，可转换，这里暂按对象处理
+                if (typeof data === 'object' && !Array.isArray(data)) {
+                    itemMap = data;
+                } else if (Array.isArray(data)) {
+                    // 如果是数组，构建映射
+                    data.forEach(item => {
+                        if (item.name && item.id) itemMap[item.name] = item.id;
+                    });
+                } else {
+                    throw new Error('items.json 格式不符合预期');
+                }
+                console.log(`✅ items.json 加载成功，共 ${Object.keys(itemMap).length} 个物品`);
+            } catch (e) {
+                console.warn('⚠️ 加载 items.json 失败，导出时将使用0代替ID', e);
+                itemMap = {};
+            }
+        }
 
         // 加载职业数据
         async function loadProfessionData(profession) {
@@ -420,7 +461,7 @@
         }
 
         // ============================================================
-        // 5. 导出功能
+        // 5. 导出功能（重写：纯数组格式，使用物品ID）
         // ============================================================
         function exportResult() {
             const statusEl = document.getElementById('exportStatus');
@@ -435,45 +476,37 @@
                 return;
             }
 
-            // 构建导出数据（类似 111.json 格式）
+            const prof = document.getElementById('profession').value;
+            const type = PROFESSION_TYPE[prof] || 'Unknown';
+
             const exportData = currentResult.tasks.map((item, index) => {
-                const d = item.detail;
+                const itemName = item.detail[4]; // 道具名称
+                let itemId = itemMap[itemName];
+                if (itemId === undefined || itemId === null) {
+                    console.warn(`⚠️ 未找到道具 "${itemName}" 的ID，将使用0`);
+                    itemId = 0;
+                }
+                // 确保 ID 为数字
+                if (typeof itemId !== 'number') {
+                    itemId = parseInt(itemId) || 0;
+                }
                 return {
                     Id: index + 1,
                     Group: 1,
-                    ItemName: d[4], // 所需道具名称
-                    Item: d[4], // 道具名称（作为标识）
-                    Amount: item.count, // 完成次数
+                    Item: itemId,
+                    Amount: item.count,
                     Enabled: true,
-                    Type: "LeveTask"
+                    Type: type
                 };
             });
 
-            // 添加元数据
-            const metadata = {
-                profession: document.getElementById('profession').value,
-                startLevel: parseInt(document.getElementById('startLevel').value),
-                targetLevel: parseInt(document.getElementById('targetLevel').value),
-                totalTasks: currentResult.total,
-                totalGold: currentResult.gold,
-                exportTime: new Date().toISOString(),
-                version: "1.0"
-            };
-
-            const finalExport = {
-                metadata: metadata,
-                tasks: exportData
-            };
-
-            // 生成 JSON 文件
-            const jsonStr = JSON.stringify(finalExport, null, 2);
+            // 生成 JSON 文件（纯数组，无包装）
+            const jsonStr = JSON.stringify(exportData, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
-
             const link = document.createElement('a');
-            const profName = document.getElementById('profession').value;
             const dateStr = new Date().toISOString().slice(0, 10);
-            link.download = `理符结果_${profName}_${dateStr}.json`;
+            link.download = `理符结果_${prof}_${dateStr}.json`;
             link.href = url;
             document.body.appendChild(link);
             link.click();
@@ -481,11 +514,9 @@
             URL.revokeObjectURL(url);
 
             statusEl.className = 'status-msg success';
-            statusEl.textContent = `✅ 导出成功！共 ${exportData.length} 条任务，文件: 理符结果_${profName}_${dateStr}.json`;
+            statusEl.textContent = `✅ 导出成功！共 ${exportData.length} 条任务，文件: 理符结果_${prof}_${dateStr}.json`;
             statusEl.style.display = 'block';
-            setTimeout(() => {
-                statusEl.style.display = 'none';
-            }, 5000);
+            setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
         }
 
         // ============================================================
@@ -592,7 +623,7 @@
         }
 
         // ============================================================
-        // 10. 事件绑定 & 启动
+        // 10. 事件绑定与启动（加载物品映射 + 职业数据）
         // ============================================================
         document.getElementById('profession').addEventListener('change', render);
         document.getElementById('startLevel').addEventListener('input', render);
@@ -605,11 +636,16 @@
         document.getElementById('modalCloseBtn').addEventListener('click', () =>
             document.getElementById('taskModal').classList.remove('active'));
         document.getElementById('taskModal').addEventListener('click', e => {
-            if (e.target === e.currentTarget) e.target.classList.remove('active');
+             (e.target === e.currentTarget) e.target.classList.remove('active');
         });
 
         setupOpacity();
-        loadAllData();
+
+        // 启动：先加载物品映射，再加载职业数据
+        (init() {
+            等待 加载项目地图();
+            等待 加载所有数据()
+        })();
     </script>
 </body>
 </html>
