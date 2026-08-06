@@ -42,7 +42,7 @@
         .shout textarea:focus { border-color: #e91e63; outline: none; }
 
         .table-wrap { overflow-x: auto; border-radius: 16px; border: 1px solid #f8bbd0; background: rgba(255,255,255,.85); transition: background .15s; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1100px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1200px; }
         th { background: rgba(252,228,236,.85); text-align: left; padding: 10px 12px; font-weight: 700; color: #880e4f; position: sticky; top: 0; border-bottom: 2px solid #f48fb1; transition: background .15s; z-index: 2; }
         td { padding: 8px 12px; border-top: 1px solid #fce4ec; vertical-align: middle; position: relative; }
         tr:hover td { background: rgba(253,242,248,.5); }
@@ -76,6 +76,10 @@
         .status-msg { padding: 8px 16px; border-radius: 8px; font-size: 14px; margin-top: 8px; display: none; }
         .status-msg.success { display: block; background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
         .status-msg.error { display: block; background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+
+        .checkbox-group { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.4); padding: 4px 12px; border-radius: 20px; border: 1px solid #f8bbd0; }
+        .checkbox-group input[type="checkbox"] { width: 18px; height: 18px; accent-color: #e91e63; cursor: pointer; }
+        .checkbox-group label { font-weight: 600; font-size: 13px; color: #880e4f; cursor: pointer; }
 
         @media (max-width:600px) {
             .container { padding: 16px; }
@@ -133,6 +137,10 @@
                 <input type="range" id="opacitySlider" min="0" max="1" step=".05" value=".85" />
                 <span class="val" id="opacityVal">0.85</span>
             </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="filterWholesale" />
+                <label for="filterWholesale">屏蔽批发委托</label>
+            </div>
             <button class="btn" id="viewAllBtn">📋 查看全部</button>
         </div>
 
@@ -155,8 +163,8 @@
 
         <div class="table-wrap" id="tableWrap">
             <table>
-                <thead><tr><th>任务名称</th><th>接取地点</th><th>单次经验</th><th>单次金币</th><th>所需道具</th><th>理符次数</th><th>金币小计</th><th>覆盖等级</th></tr></thead>
-                <tbody id="resultBody"><tr><td colspan="8" style="text-align:center;padding:30px;color:#ad1457;">🌸 加载数据中...</td></tr></tbody>
+                <thead><tr><th>任务名称</th><th>接取地点</th><th>单次经验</th><th>单次金币</th><th>所需道具</th><th>道具数量</th><th>理符次数</th><th>金币小计</th><th>覆盖等级</th></tr></thead>
+                <tbody id="resultBody"><tr><td colspan="9" style="text-align:center;padding:30px;color:#ad1457;">🌸 加载数据中...</td></tr></tbody>
             </table>
         </div>
         <div class="footer"></div>
@@ -171,7 +179,7 @@
 
     <script>
         // ============================================================
-        // 职业中文名 → 英文Type 映射（用于导出）
+        // 职业中文名 → 英文Type 映射
         // ============================================================
         const PROFESSION_TYPE = {
             '刻木匠': 'Carpenter',
@@ -201,7 +209,7 @@
         ];
 
         // ============================================================
-        // 职业数据（从外部 JSON 加载）
+        // 职业数据
         // ============================================================
         let PD = {};
         let dataLoaded = false;
@@ -218,7 +226,6 @@
             '烹调师': 'data/chuzi.json'
         };
 
-        // ---------- 物品ID映射 ----------
         let itemMap = {};
 
         async function loadItemMap() {
@@ -250,7 +257,6 @@
             }
         }
 
-        // 加载职业数据
         async function loadProfessionData(profession) {
             const filePath = PROFESSION_FILES[profession];
             if (!filePath) {
@@ -285,9 +291,22 @@
         }
 
         // ============================================================
+        // 工具函数：解析道具名称和数量
+        // ============================================================
+        function parseItemName(raw) {
+            // 匹配末尾的 " x6" 或 " x3"（空格+数字）
+            const match = raw.match(/^(.*?)\s*x(\d+)$/);
+            if (match) {
+                return { name: match[1].trim(), quantity: parseInt(match[2]) };
+            }
+            return { name: raw.trim(), quantity: 1 };
+        }
+
+        // ============================================================
         // 核心逻辑
         // ============================================================
         let overrides = {};
+        let filterWholesale = false;
 
         function getBest(level, data) {
             if (overrides[level]) {
@@ -298,6 +317,7 @@
                 const lvNum = parseInt(lv);
                 if (lvNum <= level) {
                     for (const t of tasks) {
+                        if (filterWholesale && t[0].includes('批发委托')) continue;
                         const e = t[2] * 2;
                         if (e > maxExp) { maxExp = e; best = { level: lvNum, detail: t }; }
                     }
@@ -358,7 +378,7 @@
                     document.getElementById(id).textContent = '—');
                 document.getElementById('shoutText').value = '';
                 document.getElementById('resultBody').innerHTML =
-                    `<tr><td colspan="8" style="text-align:center;padding:30px;color:#ad1457;">🌸 该职业数据为空，请确保 data/${PROFESSION_FILES[prof]} 存在</td></tr>`;
+                    `<tr><td colspan="9" style="text-align:center;padding:30px;color:#ad1457;">🌸 该职业数据为空，请确保 data/${PROFESSION_FILES[prof]} 存在</td></tr>`;
                 return;
             }
 
@@ -375,7 +395,7 @@
 
             const tbody = document.getElementById('resultBody');
             if (!r.tasks.length) {
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:#ad1457;">🌸 已满级或无可选任务</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:#ad1457;">🌸 已满级或无可选任务</td></tr>`;
                 return;
             }
 
@@ -385,12 +405,19 @@
                 const e = d[2] * 2, g = d[3];
                 const range = item.start === item.end ? `${item.start}级` : `${item.start}～${item.end}级`;
                 const repLevel = item.start;
-                const itemName = d[4];
+                const rawItemName = d[4];
+                const parsed = parseItemName(rawItemName);
+                const displayName = parsed.name;
+                const quantity = parsed.quantity;
 
+                // 生成备选任务时也过滤批发委托
                 const allTasks = [];
                 for (const [lv, tasks] of Object.entries(data)) {
                     if (parseInt(lv) <= repLevel) {
-                        for (const t of tasks) allTasks.push({ level: parseInt(lv), task: t });
+                        for (const t of tasks) {
+                            if (filterWholesale && t[0].includes('批发委托')) continue;
+                            allTasks.push({ level: parseInt(lv), task: t });
+                        }
                     }
                 }
                 allTasks.sort((a, b) => b.task[2] - a.task[2]);
@@ -419,8 +446,8 @@
                     taskHtml = `<span style="font-weight:500;">${d[0]}</span>`;
                 }
 
-                const copyBtn = `<button class="copy-btn" onclick="copyItem('${itemName.replace(/'/g,"\\'")}', this)">📋复制</button>`;
-                const itemCell = `<span class="item-cell">${itemName} ${copyBtn}</span>`;
+                const copyBtn = `<button class="copy-btn" onclick="copyItem('${displayName.replace(/'/g,"\\'")}', this)">📋复制</button>`;
+                const itemCell = `<span class="item-cell">${displayName} ${copyBtn}</span>`;
 
                 html += `<tr>
                     <td>${taskHtml}</td>
@@ -428,6 +455,7 @@
                     <td class="exp">${e.toLocaleString()}</td>
                     <td class="gld">${g.toLocaleString()}</td>
                     <td>${itemCell}</td>
+                    <td style="text-align:center;font-weight:600;">${quantity}</td>
                     <td class="cnt">${item.count}</td>
                     <td class="gld">${(g*item.count).toLocaleString()}</td>
                     <td class="rng">${range}</td>
@@ -451,7 +479,7 @@
         }
 
         // ============================================================
-        // 导出功能（最终版：无Id，无ItemName，仅 Group, Item, Amount, Enabled, Type）
+        // 导出功能（最终版：Amount = 任务次数 × 单次道具数量）
         // ============================================================
         function exportResult() {
             const statusEl = document.getElementById('exportStatus');
@@ -470,7 +498,10 @@
             const type = PROFESSION_TYPE[prof] || 'Unknown';
 
             const exportData = currentResult.tasks.map((item) => {
-                const itemName = item.detail[4];
+                const rawItemName = item.detail[4];
+                const parsed = parseItemName(rawItemName);
+                const itemName = parsed.name;
+                const quantity = parsed.quantity;
                 let itemId = itemMap[itemName];
                 if (itemId === undefined || itemId === null) {
                     console.warn(`⚠️ 未找到道具 "${itemName}" 的ID，将使用0`);
@@ -479,10 +510,12 @@
                 if (typeof itemId !== 'number') {
                     itemId = Number(itemId) || 0;
                 }
+                // 总道具数 = 任务次数 × 单次所需数量
+                const totalAmount = item.count * quantity;
                 return {
                     Group: 1,
                     Item: itemId,
-                    Amount: item.count,
+                    Amount: totalAmount,
                     Enabled: true,
                     Type: type
                 };
@@ -501,13 +534,13 @@
             URL.revokeObjectURL(url);
 
             statusEl.className = 'status-msg success';
-            statusEl.textContent = `✅ 导出成功！共 ${exportData.length} 条任务，文件: 理符结果_${prof}_${dateStr}.json`;
+            statusEl.textContent = `✅ 导出成功！共 ${exportData.length} 条任务，文件: 理符结果_${prof}_${dateStr}.json (Amount为总道具数)`;
             statusEl.style.display = 'block';
             setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
         }
 
         // ============================================================
-        // 复制道具
+        // 复制道具（仅复制纯净名称）
         // ============================================================
         function copyItem(text, btn) {
             navigator.clipboard.writeText(text).then(() => {
@@ -534,7 +567,7 @@
         function resetOverrides() { overrides = {}; render(); }
 
         // ============================================================
-        // 查看全部
+        // 查看全部（也应用过滤）
         // ============================================================
         function showAll() {
             const prof = document.getElementById('profession').value;
@@ -548,12 +581,14 @@
                 modal.classList.add('active');
                 return;
             }
-            title.textContent = `📋 ${prof} - 全部理符任务`;
+            title.textContent = `📋 ${prof} - 全部理符任务${filterWholesale ? ' (已屏蔽批发委托)' : ''}`;
             const levels = Object.keys(data).sort((a, b) => parseInt(a) - parseInt(b));
-            let html = `<table><thead><tr><th>等级</th><th>任务名称</th><th>接取地点</th><th>经验</th><th>金币</th><th>道具</th></tr></thead><tbody>`;
+            let html = `<table><thead><tr><th>等级</th><th>任务名称</th><th>接取地点</th><th>经验</th><th>金币</th><th>道具</th><th>数量</th></tr></thead><tbody>`;
             for (const lv of levels) {
                 for (const t of data[lv] || []) {
-                    html += `<tr><td><span class="badge">Lv.${lv}</span></td><td>${t[0]}</td><td>${t[1]}</td><td>${t[2].toLocaleString()}</td><td>${t[3].toLocaleString()}</td><td>${t[4]}</td></tr>`;
+                    if (filterWholesale && t[0].includes('批发委托')) continue;
+                    const parsed = parseItemName(t[4]);
+                    html += `<tr><td><span class="badge">Lv.${lv}</span></td><td>${t[0]}</td><td>${t[1]}</td><td>${t[2].toLocaleString()}</td><td>${t[3].toLocaleString()}</td><td>${parsed.name}</td><td>${parsed.quantity}</td></tr>`;
                 }
             }
             html += `</tbody></table>`;
@@ -604,7 +639,7 @@
         }
 
         // ============================================================
-        // 事件绑定 & 启动
+        // 事件绑定
         // ============================================================
         document.getElementById('profession').addEventListener('change', render);
         document.getElementById('startLevel').addEventListener('input', render);
@@ -618,6 +653,11 @@
             document.getElementById('taskModal').classList.remove('active'));
         document.getElementById('taskModal').addEventListener('click', e => {
             if (e.target === e.currentTarget) e.target.classList.remove('active');
+        });
+
+        document.getElementById('filterWholesale').addEventListener('change', function() {
+            filterWholesale = this.checked;
+            render();
         });
 
         setupOpacity();
